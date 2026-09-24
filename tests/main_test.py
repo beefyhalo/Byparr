@@ -63,6 +63,33 @@ def test_bypass(website: str):
     assert "__cf_chl" not in solution["url"]
 
 
+def test_ddos_guard_interstitial_is_not_returned_as_the_page():
+    """A non-Cloudflare challenge must still be waited out, not just Cloudflare's.
+
+    challenge_present() only recognises Cloudflare, so DDoS-Guard's "checking
+    your browser" JS interstitial was never detected as a challenge at all --
+    _navigate_and_solve grabbed page.content() right after domcontentloaded,
+    before the interstitial's own redirect had a chance to land, and returned
+    that snapshot even though it went on to wait for networkidle anyway (#15,
+    #284, both closed "not planned" for Cloudflare-only support).
+    """
+    website = "https://annas-archive.gl/"
+    test_request = httpx2.get(website)
+    if test_request.status_code >= HTTPStatus.INTERNAL_SERVER_ERROR:
+        pytest.skip(f"Skipping {website} - ({test_request.status_code})")
+
+    response = client.post(
+        "/v1",
+        json=LinkRequest.model_construct(
+            url=website, cmd="request.get", max_timeout=60
+        ).model_dump(),
+    )
+
+    assert response.status_code == HTTPStatus.OK
+    solution = response.json()["solution"]
+    assert "Checking your browser before accessing" not in solution["response"]
+
+
 def test_json_api():
     """
     JSON APIs must return 200, not crash on the UA evaluate.

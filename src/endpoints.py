@@ -136,8 +136,13 @@ async def _navigate_and_solve(
     )
 
     if not await challenge_present(dep.page):
-        page_html = await dep.page.content()
+        # Grabbed after the networkidle wait, not before: a site whose
+        # challenge isn't Cloudflare (challenge_present is Cloudflare-only)
+        # can still be mid-redirect off a JS interstitial at domcontentloaded
+        # -- DDoS-Guard's "checking your browser" page does exactly this. The
+        # wait below already happens; only the snapshot needs to move.
         await _wait_for_networkidle(dep, timer)
+        page_html = await dep.page.content()
         return False, page_html, page_request
 
     await solve_challenge(dep.page, timer)
